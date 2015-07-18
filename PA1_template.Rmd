@@ -8,18 +8,148 @@ output:
 
 ## Loading and preprocessing the data
 
+In this part, the file 'activity.zip' is unzipped & read into a dataframe. In addition, column 'date' is converted into date type. At last, NA's are removed.
+```{r}
+data        <- read.csv(unz("activity.zip", "activity.csv"))
+data        <- transform(data, date= as.Date(date,"%Y-%m-%d"))
+bad         <- is.na(data$steps)
+cleandata   <- data[!bad,]
+```
+
 
 
 ## What is mean total number of steps taken per day?
 
+In order to answer this question, 'dplyr' package is used. Therefore, the first step is to load or install it, if it has not done it before.
+```{r, message=FALSE, warning=FALSE}
+if(!require(dplyr)){
+    install.packages("dplyr")
+    library(dplyr)
+}
+```
 
+
+First, using 'dplyr' package, total steps, median & mean per day are calculated. Then, it is presented a histogram of total steps.
+```{r}
+temp        <- group_by(cleandata,date)
+summary1    <- summarise(temp, mean= mean(steps),median= median(steps), sum= sum(steps))
+
+title       <- "STEPS DISTRIBUTION"
+xlab        <- "STEPS"
+h           <- hist(summary1$sum,breaks=10, xlim = c(0,25000), main=title, xlab=xlab)
+```
+
+The next step is to  report the mean and median of the total number of steps taken per day. In order to do so, it is used 'xtable' package. Thus, it is installed or loaded.
+```{r, message=FALSE, warning=FALSE}
+if(!require(xtable)){
+    install.packages("xtable")
+    library(xtable)
+}
+```
+Means & medians are reported:
+
+```{r, results='asis'}
+summary1<- transform(summary1, date=as.character(date))
+xt<- xtable(summary1[,1:3])
+align(xt) <- "cccc"
+print(xt,type="html")
+```
 
 ## What is the average daily activity pattern?
+By using 'dplyr' package, data is grouped by interval & then, average per interval is calculated & plotted.
 
+```{r}
+temp          <- group_by(cleandata,interval)
+summary2      <- summarise(temp, steps=mean(steps))
+aux           <- max(summary2$steps)
+max           <- summary2[summary2$steps==aux,]
+maxinterval   <- max[[1]]
+title         <- "AVERAGE STEPS PER INTERVAL"
+xlab          <- "Interval"
+ylab          <- "Average steps" 
+with(summary2, plot(interval,steps, type="l",main=title,xlab=xlab,ylab=ylab))
+points(max[1],max[2],col="red")
+```
 
+The 5-minute interval, on average across all the days in the dataset that contains the maximum number of steps is `r maxinterval`.
 
 ## Imputing missing values
+Total number of missing values in the dataset
+```{r}
+Total.NAs<- sum(is.na(data$steps))
+Total.NAs
+```
 
+This portion of code replaces each missing value by the average value corresponding to the missing value's respective interval.
+```{r}
+data2<-data
+for(i in seq(nrow(data2)))
+{
+    if(is.na(data2$steps[i]))
+    {
+        interval         <- data2$interval[i]
+        temp             <- summary2[summary2$interval==interval,2]
+        data2$steps[[i]] <- temp[[1]]
+    }
+}
+```
 
+With the new dataset, it is calculated the mean, median & total steps per day. It is presented the histogram of total steps.
+```{r}
+temp        <- group_by(data2,date)
+summary3    <- summarise(temp, mean= mean(steps),median= median(steps), sum= sum(steps))
+title       <- "STEPS DISTRIBUTION"
+xlab        <- "STEPS"
+hist(summary3$sum,breaks=10, xlim = c(0,25000), main=title, xlab=xlab)
+```
+
+Means & medians are reported:
+
+```{r, results='asis'}
+summary3<- transform(summary3, date=as.character(date))
+xt<- xtable(summary3[,1:3])
+align(xt) <- "cccc"
+print(xt,type="html")
+```
+
+### Do these values differ from the estimates from the first part of the assignment?
+No, they don't. Medians & means did not change.
+
+### What is the impact of imputing missing data on the estimates of the total daily number of steps?
+These new artificial data could bias any further analysis.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+In order to answer this question, first it is necessary to classify each row by 'weekday' or 'weekend'. This is accomplished by the means of the function 'classifier'. After each row is classified, it is created a new column of factor type that contains the classification. Finally, by using 'dplyr' package, it is calculated the mean of steps grouped by interval & whether is weekday or weekend.
+
+```{r}
+dates        <- weekdays(data2$date)
+classifier   <- function(x){
+    if(x=="Saturday" || x=="Sunday")
+        "weekend"
+    else{
+        "weekday"
+    }
+}
+aux                <-unname(sapply(dates, classifier))
+data2$Day.Class    <-factor(aux)
+
+temp<- group_by(data2,interval,Day.Class)
+summary4<- summarise(temp, steps=mean(steps))
+
+```
+
+A suitable package for making the comparison graph is 'ggplot2'.
+```{r, message=FALSE, warning=FALSE}
+if(!require(ggplot2)){
+    install.packages("ggplot2")
+    library(ggplot2)
+}
+```
+
+```{r}
+g<- ggplot(summary4,aes(interval,steps))
+g<- g + geom_line(color="steelblue")
+g<- g + facet_grid(Day.Class~.)
+g<- g + labs(y="Average steps")
+g
+```
